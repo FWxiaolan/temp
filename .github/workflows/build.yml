@@ -1,137 +1,53 @@
-# .github/workflows/build.yml
-name: Build Executable
+build-windows:
+  runs-on: windows-latest
+  
+  steps:
+  - name: 检出代码
+    uses: actions/checkout@v4
 
-on:
-  push:
-    tags:
-      - 'v*'
-    branches:
-      - main
-      - master
-  pull_request:
-    branches:
-      - main
-      - master
+  - name: 设置 Python 环境
+    uses: actions/setup-python@v5
+    with:
+      python-version: '3.10'
+      cache: 'pip'
 
-jobs:
-  build-windows:
-    runs-on: windows-latest
-    
-    steps:
-    - name: 检出代码
-      uses: actions/checkout@v4
+  - name: 安装依赖
+    run: |
+      python -m pip install --upgrade pip
+      pip install ultralytics PySide6 opencv-python nuitka ordered-set zstandard
 
-    - name: 设置 Python 环境
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
-        cache: 'pip'
+  - name: 检查模型文件
+    run: |
+      if (-not (Test-Path "yolo26n-face.pt")) {
+        Write-Error "模型文件 yolo26n-face.pt 不存在，请确保已上传到仓库"
+        exit 1
+      }
+    shell: pwsh
 
-    - name: 安装依赖
-      run: |
-        python -m pip install --upgrade pip
-        pip install ultralytics PySide6 opencv-python nuitka ordered-set zstandard
+  - name: 自动确认 Dependency Walker 下载并编译
+    run: |
+      # 使用 echo y 自动确认下载依赖分析工具
+      echo y | nuitka --standalone `
+        --enable-console `
+        --follow-imports `
+        --include-data-file=yolo26n-face.pt=yolo26n-face.pt `
+        --include-data-file=icon.ico=icon.ico `
+        --windows-icon-from-ico=icon.ico `
+        --enable-plugin=pyside6 `
+        --enable-plugin=opencv `
+        --enable-plugin=multiprocessing `
+        --output-dir=dist `
+        main.py
+    shell: pwsh
 
-    - name: 下载模型文件
-      run: |
-        if (-not (Test-Path "yolo26n-face.pt")) {
-          Write-Host "模型文件不存在，请确保已上传到仓库"
-          exit 1
-        }
-      shell: pwsh
+  - name: 打包发布文件
+    run: |
+      Compress-Archive -Path dist/main.dist/* -DestinationPath FaceRollCall_Windows.zip
+    shell: pwsh
 
-    - name: Nuitka 编译
-      run: |
-        nuitka --standalone `
-          --enable-console `
-          --follow-imports `
-          --include-data-file=yolo26n-face.pt=yolo26n-face.pt `
-          --include-data-file=icon.ico=icon.ico `
-          --windows-icon-from-ico=icon.ico `
-          --enable-plugin=pyside6 `
-          --enable-plugin=opencv `
-          --enable-plugin=multiprocessing `
-          --output-dir=dist `
-          main.py
-      shell: pwsh
-
-    - name: 打包发布文件
-      run: |
-        Compress-Archive -Path dist/main.dist/* -DestinationPath FaceRollCall_Windows.zip
-      shell: pwsh
-
-    - name: 上传构建产物
-      uses: actions/upload-artifact@v4
-      with:
-        name: FaceRollCall-Windows
-        path: FaceRollCall_Windows.zip
-        retention-days: 30
-
-    - name: 创建 Release (仅标签触发)
-      if: startsWith(github.ref, 'refs/tags/')
-      uses: softprops/action-gh-release@v1
-      with:
-        files: FaceRollCall_Windows.zip
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  build-linux:
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: 检出代码
-      uses: actions/checkout@v4
-
-    - name: 设置 Python 环境
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
-        cache: 'pip'
-
-    - name: 安装系统依赖
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y patchelf libgtk-3-dev
-
-    - name: 安装 Python 依赖
-      run: |
-        python -m pip install --upgrade pip
-        pip install ultralytics PySide6 opencv-python nuitka ordered-set zstandard
-
-    - name: 检查模型文件
-      run: |
-        if [ ! -f "yolo26n-face.pt" ]; then
-          echo "模型文件不存在，请确保已上传到仓库"
-          exit 1
-        fi
-
-    - name: Nuitka 编译
-      run: |
-        nuitka --standalone \
-          --enable-console \
-          --follow-imports \
-          --include-data-file=yolo26n-face.pt=yolo26n-face.pt \
-          --enable-plugin=pyside6 \
-          --enable-plugin=opencv \
-          --enable-plugin=multiprocessing \
-          --output-dir=dist \
-          main.py
-
-    - name: 打包发布文件
-      run: |
-        zip -r FaceRollCall_Linux.zip dist/main.dist/
-
-    - name: 上传构建产物
-      uses: actions/upload-artifact@v4
-      with:
-        name: FaceRollCall-Linux
-        path: FaceRollCall_Linux.zip
-        retention-days: 30
-
-    - name: 创建 Release (仅标签触发)
-      if: startsWith(github.ref, 'refs/tags/')
-      uses: softprops/action-gh-release@v1
-      with:
-        files: FaceRollCall_Linux.zip
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  - name: 上传构建产物
+    uses: actions/upload-artifact@v4
+    with:
+      name: FaceRollCall-Windows
+      path: FaceRollCall_Windows.zip
+      retention-days: 30
