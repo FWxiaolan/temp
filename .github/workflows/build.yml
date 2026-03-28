@@ -34,7 +34,7 @@ jobs:
 
       - name: Build with Nuitka (Windows)
         run: |
-          nuitka --standalone --enable-plugin=pyside6 --enable-plugin=opencv --enable-plugin=multiprocessing --enable-console --windows-uac-admin --include-data-file=yolo26n-face.pt=yolo26n-face.pt --include-data-file=icon.ico=icon.ico --windows-icon-from-ico=icon.ico --include-package=cv2 --include-package=numpy --include-package=ultralytics --include-module=PIL --output-dir=dist --output-filename=FaceRollCall.exe --follow-imports --lto=yes --jobs=4 --assume-yes-for-downloads main.py
+          nuitka --standalone --enable-plugin=pyside6 --enable-plugin=multiprocessing --enable-console --windows-uac-admin --include-data-file=yolo26n-face.pt=yolo26n-face.pt --include-data-file=icon.ico=icon.ico --windows-icon-from-ico=icon.ico --include-package=cv2 --include-package=numpy --include-package=ultralytics --include-module=PIL --output-dir=dist --output-filename=FaceRollCall.exe --follow-imports --lto=yes --jobs=4 --assume-yes-for-downloads main.py
 
       - name: List files after build
         run: |
@@ -82,7 +82,7 @@ jobs:
 
       - name: Build with Nuitka (Linux)
         run: |
-          nuitka --standalone --enable-plugin=pyside6 --enable-plugin=opencv --enable-plugin=multiprocessing --enable-console --windows-uac-admin --include-data-file=yolo26n-face.pt=yolo26n-face.pt --include-data-file=icon.ico=icon.ico --windows-icon-from-ico=icon.ico --include-package=cv2 --include-package=numpy --include-package=ultralytics --include-module=PIL --output-dir=dist --output-filename=FaceRollCall.exe --follow-imports --lto=yes --jobs=4 --assume-yes-for-downloads main.py
+          nuitka --standalone --enable-plugin=pyside6 --enable-plugin=multiprocessing --enable-console --windows-uac-admin --include-data-file=yolo26n-face.pt=yolo26n-face.pt --include-data-file=icon.ico=icon.ico --windows-icon-from-ico=icon.ico --include-package=cv2 --include-package=numpy --include-package=ultralytics --include-module=PIL --output-dir=dist --output-filename=FaceRollCall.exe --follow-imports --lto=yes --jobs=4 --assume-yes-for-downloads main.py
 
       - name: List files after build
         run: |
