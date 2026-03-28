@@ -5,7 +5,7 @@ on:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
-  workflow_dispatch:   # 允许手动触发
+  workflow_dispatch:
 
 jobs:
   build-windows:
@@ -17,13 +17,20 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'   # 根据项目需求选择版本
+          python-version: '3.10'
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install nuitka
           pip install PySide6 ultralytics opencv-python numpy pillow
+
+      - name: List files before build
+        run: |
+          echo "Files in repository:"
+          dir
+          echo "Checking if model file exists:"
+          if (Test-Path "yolo26n-face.pt") { echo "Model file found" } else { echo "Model file NOT found" }
 
       - name: Build with Nuitka (Windows)
         run: |
@@ -36,6 +43,7 @@ jobs:
                  --include-package=numpy `
                  --include-package=ultralytics `
                  --include-module=PIL `
+                 --assume-yes-for-downloads `
                  --output-dir=dist `
                  --output-filename=FaceRollCall.exe `
                  --follow-imports `
@@ -43,11 +51,25 @@ jobs:
                  --jobs=4 `
                  main.py
 
+      - name: List files after build
+        run: |
+          echo "Checking build output:"
+          if (Test-Path "dist/main.dist") { 
+            echo "Build successful! Files in dist/main.dist:"
+            dir dist/main.dist
+          } else {
+            echo "Build failed - dist/main.dist not found"
+            echo "Checking dist directory:"
+            if (Test-Path "dist") { dir dist } else { echo "dist directory not found" }
+          }
+
       - name: Upload Windows artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: FaceRollCall-Windows
           path: dist/main.dist/
+          if-no-files-found: error
 
   build-linux:
     runs-on: ubuntu-latest
@@ -66,16 +88,23 @@ jobs:
           pip install nuitka
           pip install PySide6 ultralytics opencv-python numpy pillow
 
+      - name: List files before build
+        run: |
+          echo "Files in repository:"
+          ls -la
+          echo "Checking if model file exists:"
+          if [ -f "yolo26n-face.pt" ]; then echo "Model file found"; else echo "Model file NOT found"; fi
+
       - name: Build with Nuitka (Linux)
         run: |
           nuitka --standalone \
                  --enable-plugin=pyside6 \
-                 --linux-onefile-icon=icon.ico \   # 可选，设置图标
                  --include-data-files=yolo26n-face.pt=./ \
                  --include-package=cv2 \
                  --include-package=numpy \
                  --include-package=ultralytics \
                  --include-module=PIL \
+                 --assume-yes-for-downloads \
                  --output-dir=dist \
                  --output-filename=FaceRollCall \
                  --follow-imports \
@@ -83,8 +112,22 @@ jobs:
                  --jobs=4 \
                  main.py
 
+      - name: List files after build
+        run: |
+          echo "Checking build output:"
+          if [ -d "dist/main.dist" ]; then 
+            echo "Build successful! Files in dist/main.dist:"
+            ls -la dist/main.dist
+          else
+            echo "Build failed - dist/main.dist not found"
+            echo "Checking dist directory:"
+            if [ -d "dist" ]; then ls -la dist; else echo "dist directory not found"; fi
+          fi
+
       - name: Upload Linux artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: FaceRollCall-Linux
           path: dist/main.dist/
+          if-no-files-found: error
