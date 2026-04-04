@@ -26,7 +26,7 @@ jobs:
           pip install PySide6 opencv-python numpy pillow openvino
       - name: Build with Nuitka (Windows)
         run: |
-          nuitka --standalone --enable-plugin=pyside6 --enable-plugin=multiprocessing --enable-console --windows-uac-admin --include-data-file=icon.ico=icon.ico --windows-icon-from-ico=icon.ico --include-module=PIL --output-dir=dist --output-filename=FaceRollCall.exe --follow-imports --lto=yes --jobs=4 --python-flag=no_site  --enable-plugin=anti-bloat --assume-yes-for-downloads main.py
+          nuitka --standalone --enable-plugin=pyside6 --enable-plugin=multiprocessing --enable-plugin=numpy --enable-plugin=anti-bloat --enable-console --windows-uac-admin --windows-icon-from-ico=icon.ico --include-data-file=icon.ico=icon.ico --include-package=openvino --include-package-data=openvino --output-dir=dist --output-filename=FaceRollCall.exe --follow-imports --lto=yes --jobs=4 --python-flag=no_site --assume-yes-for-downloads main.py
       - name: List files after build
         run: |
           echo "Checking build output:"
