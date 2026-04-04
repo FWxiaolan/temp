@@ -24,15 +24,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install nuitka
           pip install PySide6 opencv-python numpy pillow openvino
-      - name: List files before build
-        run: |
-          echo "Files in repository:"
-          dir
-          echo "Checking if model file exists:"
-          if (Test-Path "yolo26n-face.pt") { echo "Model file found" } else { echo "Model file NOT found" }
       - name: Build with Nuitka (Windows)
         run: |
-          nuitka --standalone --enable-plugin=pyside6 --enable-plugin=multiprocessing --enable-console --windows-uac-admin --include-data-file=icon.ico=icon.ico --windows-icon-from-ico=icon.ico --include-package=cv2 --include-package=numpy --include-package=ultralytics --include-module=PIL --output-dir=dist --output-filename=FaceRollCall.exe --follow-imports --lto=yes --jobs=4 --python-flag=no_site  --enable-plugin=anti-bloat --assume-yes-for-downloads main.py
+          nuitka --standalone --enable-plugin=pyside6 --enable-plugin=multiprocessing --enable-console --windows-uac-admin --include-data-file=icon.ico=icon.ico --windows-icon-from-ico=icon.ico --include-module=PIL --output-dir=dist --output-filename=FaceRollCall.exe --follow-imports --lto=yes --jobs=4 --python-flag=no_site  --enable-plugin=anti-bloat --assume-yes-for-downloads main.py
       - name: List files after build
         run: |
           echo "Checking build output:"
