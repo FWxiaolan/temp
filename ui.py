@@ -50,7 +50,7 @@ class MarkedImageDialog(QDialog):
 class FaceRollCallApp(QMainWindow):
     def __init__(self, frame_queue, raw_queue, shared_dict, stop_event, worker_process, selected_cam_index, available_cams):
         super().__init__()
-        self.setWindowTitle("学生人脸点名器 FaceRollCall")
+        self.setWindowTitle("学生人脸点名器 FaceRollCall (Github: hexo141)")
         self.showMaximized()
         
         # 接收外部传入的资源
