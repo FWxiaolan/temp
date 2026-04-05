@@ -1,6 +1,7 @@
 import sys
 import cv2
 import time
+import platform
 from PySide6.QtWidgets import (QMainWindow, QLabel, QPushButton,
                                QVBoxLayout, QWidget, QHBoxLayout, QSpinBox,
                                QComboBox, QMessageBox, QDialog, QScrollArea, QStatusBar)
@@ -14,6 +15,86 @@ try:
 except ImportError:
     PSUTIL_AVAILABLE = False
     print("提示：安装 psutil 可显示 CPU 占用率 (pip install psutil)")
+
+# ==============================================================================
+# Windows 下枚举摄像头名称（使用 WMI）
+# ==============================================================================
+def enumerate_cameras_windows():
+    """返回 [(index, name), ...] 列表，按索引顺序"""
+    try:
+        import wmi
+        c = wmi.WMI()
+        # 获取所有视频输入设备
+        devices = c.Win32_PnPEntity(PNPClass="Image", ConfigManagerErrorCode=0)
+        # 提取友好名称，并尝试排序（按 VID/PID 或名称）
+        camera_names = {}
+        for dev in devices:
+            if dev.Name and 'camera' in dev.Name.lower() or 'webcam' in dev.Name.lower() or 'video' in dev.Name.lower():
+                # 尝试提取设备实例 ID 以获取索引线索（但不可靠）
+                # 更可靠的方式：逐个尝试 open
+                pass
+
+        # 实际上，WMI 无法直接给出 OpenCV 的索引映射
+        # 因此我们采用“探测法”：尝试打开每个索引，成功则记录
+        # 同时用 WMI 名称按顺序匹配（近似）
+        wmi_names = [dev.Name for dev in devices if dev.Name]
+        
+        # 探测可用索引
+        available = []
+        max_test = 5  # 最多测试 0~4
+        cap = None
+        for i in range(max_test):
+            try:
+                cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)  # 使用 DirectShow 更快
+                if cap.isOpened():
+                    ret, _ = cap.read()
+                    if ret:
+                        # 尝试从 WMI 名称中分配一个名字
+                        name = wmi_names[i] if i < len(wmi_names) else f"Camera {i}"
+                        available.append((i, name))
+                    cap.release()
+                else:
+                    break
+            except Exception:
+                if cap:
+                    cap.release()
+                break
+        return available
+    except Exception as e:
+        print(f"摄像头枚举失败（回退到数字ID）: {e}")
+        # 回退：探测前几个索引
+        available = []
+        for i in range(3):
+            cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
+            if cap.isOpened():
+                ret, _ = cap.read()
+                if ret:
+                    available.append((i, f"Camera {i}"))
+                cap.release()
+            else:
+                break
+        return available
+
+# 非 Windows 系统：使用数字 ID
+def enumerate_cameras_fallback():
+    available = []
+    for i in range(3):
+        cap = cv2.VideoCapture(i)
+        if cap.isOpened():
+            ret, _ = cap.read()
+            if ret:
+                available.append((i, f"Camera {i}"))
+            cap.release()
+        else:
+            break
+    return available
+
+# 统一接口
+def get_available_cameras():
+    if platform.system() == "Windows":
+        return enumerate_cameras_windows()
+    else:
+        return enumerate_cameras_fallback()
 
 # ==============================================================================
 # 带标记图像显示弹窗
@@ -49,6 +130,7 @@ class MarkedImageDialog(QDialog):
 # ==============================================================================
 class FaceRollCallApp(QMainWindow):
     def __init__(self, frame_queue, raw_queue, shared_dict, stop_event, worker_process, selected_cam_index, available_cams):
+        # available_cams now is list of (index, name)
         super().__init__()
         self.setWindowTitle("学生人脸点名器 FaceRollCall (Github: hexo141)")
         self.showMaximized()
@@ -61,25 +143,24 @@ class FaceRollCallApp(QMainWindow):
         self.worker_process = worker_process
         self.is_running = True
         self.selected_cam_index = selected_cam_index
-        
-        # 初始化共享字典中的摄像头索引，确保子进程知道初始状态
+
+        # 初始化共享字典中的摄像头索引
         if 'cam_index' not in self.shared_dict:
             self.shared_dict['cam_index'] = selected_cam_index
 
-        # FPS 统计相关
+        # FPS 统计
         self.frame_count = 0
         self.last_fps_update = time.time()
         self.current_fps = 0.0
 
-        # 定时器用于更新画面
+        # 定时器
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_frame)
-        self.timer.start(30)   # 约 33ms 一帧
+        self.timer.start(30)
 
-        # 状态栏信息定时器（每秒更新一次）
         self.status_timer = QTimer()
         self.status_timer.timeout.connect(self.update_status)
-        self.status_timer.start(1000)   # 每秒更新一次
+        self.status_timer.start(1000)
 
         # 初始化 UI
         self.init_ui(available_cams)
@@ -89,28 +170,32 @@ class FaceRollCallApp(QMainWindow):
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
 
-        # 视频显示区域
         self.video_label = QLabel("等待视频流...")
         self.video_label.setAlignment(Qt.AlignCenter)
         self.video_label.setStyleSheet("QLabel { background-color: #000; color: #fff; border: 1px solid #555; }")
         self.video_label.setMinimumSize(640, 480)
         main_layout.addWidget(self.video_label, 1)
 
-        # 控制区域
         control_layout = QHBoxLayout()
         
-        # 摄像头选择
+        # 摄像头选择下拉框
         self.cam_combo = QComboBox()
         self.cam_combo.setEditable(False)
-        for idx in available_cams:
-            self.cam_combo.addItem(f"Camera {idx}", idx)
         
-        # 设置初始选择
-        if self.selected_cam_index in available_cams:
-            self.cam_combo.setCurrentIndex(available_cams.index(self.selected_cam_index))
+        # available_cams 是 [(index, name), ...]
+        for idx, name in available_cams:
+            self.cam_combo.addItem(name, idx)  # userData = index
         
-        # 【关键修改】启用摄像头切换，并连接信号
-        self.cam_combo.setEnabled(True) 
+        # 设置初始选中项
+        initial_index = -1
+        for i, (idx, _) in enumerate(available_cams):
+            if idx == self.selected_cam_index:
+                initial_index = i
+                break
+        if initial_index != -1:
+            self.cam_combo.setCurrentIndex(initial_index)
+        
+        self.cam_combo.setEnabled(True)
         self.cam_combo.currentIndexChanged.connect(self.on_camera_changed)
         
         control_layout.addWidget(QLabel("摄像头: "))
@@ -132,47 +217,35 @@ class FaceRollCallApp(QMainWindow):
 
         main_layout.addLayout(control_layout)
 
-        # ---------- 底部状态栏（显示 FPS、可抽取人数、CPU 占用） ----------
-        status_bar = QStatusBar() 
+        # 状态栏
+        status_bar = QStatusBar()
         self.setStatusBar(status_bar)
         self.status_label = QLabel("初始化...")
         status_bar.addWidget(self.status_label)
 
     @Slot(int)
     def on_camera_changed(self, index):
-        """当用户在下拉框中选择不同摄像头时触发"""
         if index < 0:
             return
-        # 获取对应的摄像头 ID (userData)
-        cam_id = self.cam_combo.itemData(index)
-        print(f"UI: 请求切换到摄像头 {cam_id}")
-        
-        # 更新共享字典，子进程会轮询这个值并执行切换
+        cam_id = self.cam_combo.itemData(index)  # 这是整数索引
+        print(f"UI: 请求切换到摄像头 {cam_id} ({self.cam_combo.currentText()})")
         self.shared_dict['cam_index'] = cam_id
-        
-        # 可选：清空当前画面，避免旧画面残留误导用户
         self.video_label.clear()
         self.video_label.setText("切换摄像头中...")
 
     def update_status(self):
-        """每秒更新状态栏信息：FPS、可抽取人数、CPU占用"""
-        # 获取当前画面检测到的人脸数量
         detections = self.shared_dict.get('latest_detections', [])
         face_count = len(detections)
-        
-        # 获取 CPU 占用率（百分比）
         if PSUTIL_AVAILABLE:
             cpu_percent = psutil.cpu_percent(interval=None)
             cpu_str = f"CPU: {cpu_percent:.1f}%"
         else:
             cpu_str = "CPU: N/A"
-        
         status_text = f"FPS: {self.current_fps:.1f}  |  可抽取人数: {face_count}  |  {cpu_str}"
         self.status_label.setText(status_text)
 
     @Slot()
     def update_frame(self):
-        """从队列获取最新帧并显示，同时计算 FPS"""
         if self.is_running and not self.frame_queue.empty():
             try:
                 frame_rgb = self.frame_queue.get_nowait()
@@ -183,7 +256,6 @@ class FaceRollCallApp(QMainWindow):
                 scaled_pixmap = pixmap.scaled(self.video_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
                 self.video_label.setPixmap(scaled_pixmap)
                 
-                # 更新帧计数用于 FPS 计算
                 self.frame_count += 1
                 now = time.time()
                 elapsed = now - self.last_fps_update
@@ -195,7 +267,6 @@ class FaceRollCallApp(QMainWindow):
                 pass
 
     def start_roll_call(self):
-        """点名逻辑 - 截图整个画面并标记被点名的同学"""
         if not self.is_running:
             return
 
@@ -204,7 +275,6 @@ class FaceRollCallApp(QMainWindow):
             QMessageBox.information(self, "提示", "当前画面未检测到人脸")
             return
 
-        # 获取原始画面（无检测框）
         raw_frame = None
         if not self.raw_queue.empty():
             try:
@@ -218,31 +288,23 @@ class FaceRollCallApp(QMainWindow):
 
         num_to_select = self.count_spin.value()
         actual_count = min(len(detections), num_to_select)
-        # 按置信度排序，取前 actual_count 个
         sorted_detections = sorted(detections, key=lambda k: k['conf'], reverse=True)
         selected_detections = sorted_detections[:actual_count]
 
-        # 复制原始画面，准备绘制标记
         marked_frame = raw_frame.copy()
-        # 在画面上绘制所有检测框（绿色细框）
         for det in detections:
             x1, y1, x2, y2 = int(det['x1']), int(det['y1']), int(det['x2']), int(det['y2'])
             cv2.rectangle(marked_frame, (x1, y1), (x2, y2), (0, 255, 0), 1)
-        
-        # 对被选中的同学绘制红色粗框
         for det in selected_detections:
             x1, y1, x2, y2 = int(det['x1']), int(det['y1']), int(det['x2']), int(det['y2'])
             cv2.rectangle(marked_frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
 
         marked_frame_rgb = cv2.cvtColor(marked_frame, cv2.COLOR_BGR2RGB)
-        
         dialog = MarkedImageDialog(marked_frame_rgb, actual_count, self)
         dialog.exec()
-        
         QMessageBox.information(self, "点名完成", f"已从当前画面标记 {actual_count} 位同学")
 
     def closeEvent(self, event):
-        """关闭窗口时停止子进程"""
         if self.is_running:
             self.stop_event.set()
             if self.worker_process:
