@@ -156,7 +156,7 @@ class FaceRollCallApp(QMainWindow):
         # 定时器
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_frame)
-        self.timer.start(30)
+        self.timer.start(16)
 
         self.status_timer = QTimer()
         self.status_timer.timeout.connect(self.update_status)
