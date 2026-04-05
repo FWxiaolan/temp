@@ -126,7 +126,7 @@ def worker_process_v2(camera_index, model_path, frame_queue, raw_queue,
         return detections
 
     # ---------- OpenVINO 异步推理队列 ----------
-    infer_queue = ov.AsyncInferQueue(compiled_model, 1)
+    infer_queue = ov.AsyncInferQueue(compiled_model, 4)
 
     def inference_callback(infer_request, user_data):
         frame = user_data
