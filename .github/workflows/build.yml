@@ -24,6 +24,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install nuitka PySide6 opencv-python numpy pillow openvino psutil
           pip install wmi pywin32
+          pip install pygrabber
 
 
       - name: Build with Nuitka (Windows)
