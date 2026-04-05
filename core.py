@@ -21,7 +21,7 @@ except ImportError:
 # ==============================================================================
 MODEL_PATH = "yolo26n-face.pt"           # 原始 PyTorch 模型路径（仅用于推断模型文件夹名）
 DEFAULT_IMG_SZ = 320                     # 推理图像尺寸
-CONF_THRESHOLD = 0.45                    # 置信度阈值
+CONF_THRESHOLD = 0.55                    # 置信度阈值
 MAX_DETECTIONS = 100                     # 最大检测数量
 DEVICE = "cpu"                           # 设备（openvino 后端自动使用 CPU）
 
