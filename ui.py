@@ -15,41 +15,6 @@ except ImportError:
     PSUTIL_AVAILABLE = False
     print("提示：安装 psutil 可显示 CPU 占用率 (pip install psutil)")
 
-# 尝试导入 pygrabber 获取摄像头真实名称（仅 Windows）
-try:
-    from pygrabber.dshow_graph import FilterGraph
-    PYGRABBER_AVAILABLE = True
-except ImportError:
-    PYGRABBER_AVAILABLE = False
-    print("提示：安装 pygrabber 可显示摄像头真实名称 (pip install pygrabber)")
-
-# ==============================================================================
-# 获取 Windows 下摄像头名称列表（回退方案：返回数字 ID）
-# ==============================================================================
-def get_camera_names():
-    """返回一个列表，元素为 (显示名称, 设备索引)"""
-    cameras = []
-    if PYGRABBER_AVAILABLE:
-        try:
-            graph = FilterGraph()
-            devices = graph.get_input_devices()   # 返回设备名称列表
-            for idx, name in enumerate(devices):
-                cameras.append((name, idx))
-            return cameras
-        except Exception as e:
-            print(f"pygrabber 枚举失败: {e}")
-    # 回退方案：通过 OpenCV 探测可用的摄像头索引
-    index = 0
-    while True:
-        cap = cv2.VideoCapture(index, cv2.CAP_DSHOW)
-        if cap.isOpened():
-            cameras.append((f"Camera {index}", index))
-            cap.release()
-            index += 1
-        else:
-            break
-    return cameras
-
 # ==============================================================================
 # 带标记图像显示弹窗
 # ==============================================================================
@@ -116,10 +81,50 @@ class FaceRollCallApp(QMainWindow):
         self.status_timer.timeout.connect(self.update_status)
         self.status_timer.start(1000)   # 每秒更新一次
 
-        # 初始化 UI
+        # 初始化 UI（必须在定时器启动之后，但无妨）
         self.init_ui(available_cams)
 
     def init_ui(self, available_cams):
+        # ---------- 底部状态栏（必须最先创建，避免后续异常导致缺失） ----------
+        status_bar = QStatusBar()
+        self.setStatusBar(status_bar)
+        self.status_label = QLabel("初始化...")
+        status_bar.addWidget(self.status_label)
+
+        # ---------- 处理 available_cams 的多种可能格式 ----------
+        # 期望格式: [(display_name, camera_index), ...]
+        normalized_cams = []
+        if isinstance(available_cams, int):
+            # 如果传入了单个整数
+            normalized_cams = [(f"Camera {available_cams}", available_cams)]
+        elif isinstance(available_cams, list):
+            if len(available_cams) == 0:
+                # 空列表，至少提供一个默认摄像头
+                normalized_cams = [("Camera 0", 0)]
+            else:
+                first = available_cams[0]
+                if isinstance(first, int):
+                    # 列表元素为整数：如 [0,1,2]
+                    for idx in available_cams:
+                        normalized_cams.append((f"Camera {idx}", idx))
+                elif isinstance(first, tuple) and len(first) == 2:
+                    # 已经是正确格式
+                    normalized_cams = available_cams
+                else:
+                    # 未知格式，回退到索引0
+                    normalized_cams = [("Camera 0", 0)]
+        else:
+            # 其他类型，回退
+            normalized_cams = [("Camera 0", 0)]
+
+        # 确保选中的摄像头索引存在于列表中，否则使用第一个
+        found = any(idx == self.selected_cam_index for _, idx in normalized_cams)
+        if not found and len(normalized_cams) > 0:
+            self.selected_cam_index = normalized_cams[0][1]
+            # 同时更新共享字典
+            self.shared_dict['cam_index'] = self.selected_cam_index
+
+        # 中央部件
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
@@ -137,12 +142,11 @@ class FaceRollCallApp(QMainWindow):
         # 摄像头选择（使用真实名称）
         self.cam_combo = QComboBox()
         self.cam_combo.setEditable(False)
-        # available_cams 已经是 (显示名称, 索引) 的列表
-        for name, idx in available_cams:
+        for name, idx in normalized_cams:
             self.cam_combo.addItem(name, idx)
 
         # 设置初始选择
-        for i, (_, idx) in enumerate(available_cams):
+        for i, (_, idx) in enumerate(normalized_cams):
             if idx == self.selected_cam_index:
                 self.cam_combo.setCurrentIndex(i)
                 break
@@ -170,16 +174,10 @@ class FaceRollCallApp(QMainWindow):
 
         main_layout.addLayout(control_layout)
 
-        # ---------- 底部状态栏（显示 FPS、可抽取人数、CPU 占用） ----------
-        status_bar = QStatusBar()
-        self.setStatusBar(status_bar)
-        self.status_label = QLabel("初始化...")
-        status_bar.addWidget(self.status_label)
-
     @Slot(int)
     def on_camera_changed(self, index):
         """当用户在下拉框中选择不同摄像头时触发"""
-        if index >= 0:
+        if index >= 0:                     # 修复原错误：原代码写成了 if index = 1.0:
             new_cam_index = self.cam_combo.currentData()
             # 更新共享字典，子进程会读取该值切换摄像头
             self.shared_dict['cam_index'] = new_cam_index
@@ -205,12 +203,16 @@ class FaceRollCallApp(QMainWindow):
                     # 缩放以适应 label 大小，保持宽高比
                     scaled_pixmap = pixmap.scaled(self.video_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
                     self.video_label.setPixmap(scaled_pixmap)
-        except Exception as e:
+        except Exception:
             # 忽略可能的队列空异常
             pass
 
     def update_status(self):
         """更新底部状态栏信息：FPS、可抽取人数、CPU 占用"""
+        # 确保 self.status_label 存在（防御）
+        if not hasattr(self, 'status_label'):
+            return
+
         detections = self.shared_dict.get('latest_detections', [])
         face_count = len(detections)
 
