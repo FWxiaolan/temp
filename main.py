@@ -204,10 +204,10 @@ def main():
         shared_dict['latest_detections'] = []
         
         update_progress(80, "启动人脸检测引擎...")
-        from core import worker_process_v2, MODEL_PATH as CORE_MODEL_PATH
+        from core import worker_process_v2
         worker = Process(
             target=worker_process_v2,
-            args=(selected_cam, CORE_MODEL_PATH, frame_queue,
+            args=(selected_cam, MODEL_PATH, frame_queue,
                   raw_queue, stop_event, shared_dict, init_queue)
         )
         worker.start()
