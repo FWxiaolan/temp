@@ -22,21 +22,6 @@ DEFAULT_IMG_SZ = 640                     # 推理图像尺寸
 CONF_THRESHOLD = 0.30                    # 置信度阈值
 MAX_DETECTIONS = 100                     # 最大检测数量
 
-# ============================================================================== 
-# 辅助函数：仅检查 OpenVINO IR 模型是否存在，返回模型文件夹路径
-# ==============================================================================
-def ensure_openvino_model(original_pt_path):
-    """
-    检查 OpenVINO IR 模型文件夹是否存在。
-    返回模型文件夹路径（如 'yolo26n-face_openvino_model'），失败则返回 None。
-    """
-    base_name = os.path.splitext(os.path.basename(original_pt_path))[0]
-    ov_dir = f"{base_name}_openvino_model"
-    ov_xml = os.path.join(ov_dir, f"{base_name}.xml")
-    if os.path.exists(ov_xml):
-        return ov_dir
-    print(f"错误：未找到 OpenVINO IR 模型文件 {ov_xml}，请先手动导出模型！")
-    return None
 
 # ==============================================================================
 # 子进程工作函数 v3 (支持热切换摄像头版)
@@ -50,15 +35,11 @@ def worker_process_v2(camera_index, model_path, frame_queue, raw_queue,
     
     # ---------- 加载模型（一次性加载，全程复用） ----------
 
-    ov_model_dir = ensure_openvino_model(model_path)
-    if not (ov_model_dir and os.path.exists(ov_model_dir) and OV_AVAILABLE):
-        print("未找到 OpenVINO 模型或 OpenVINO 不可用")
-        init_queue.put(False)
-        return
+
 
     try:
         core = ov.Core()
-        ov_model = core.read_model(os.path.join(ov_model_dir, f"{os.path.splitext(os.path.basename(model_path))[0]}.xml"))
+        ov_model = core.read_model(os.path.join(MODEL_PATH, "yolo26n-face.xml"))
         device = "GPU" if "GPU" in core.available_devices else "CPU"
         print("Use device " + device)
         compiled_model = core.compile_model(ov_model, device)
